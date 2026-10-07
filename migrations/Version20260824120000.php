@@ -47,6 +47,14 @@ final class Version20260824120000 extends AbstractMigration
                 continue;
             }
 
+            // Null the ids whose user was deleted while the key was missing, as ON DELETE SET NULL would have done,
+            // otherwise adding the key fails on them.
+            $this->connection->executeStatement(\sprintf(
+                'UPDATE %1$s SET %2$s = NULL WHERE %2$s IS NOT NULL AND %2$s NOT IN (SELECT id FROM %3$s)',
+                self::TABLE,
+                $column,
+                self::USER_TABLE,
+            ));
             $newTable->addForeignKeyConstraint(self::USER_TABLE, [$column], ['id'], ['onDelete' => 'SET NULL']);
         }
 
@@ -55,16 +63,7 @@ final class Version20260824120000 extends AbstractMigration
 
     public function down(Schema $schema): void
     {
-        $table = $schema->getTable(self::TABLE);
-        $newTable = clone $table;
-
-        foreach ($newTable->getForeignKeys() as $foreignKey) {
-            if (0 === \strcasecmp($foreignKey->getForeignTableName(), self::USER_TABLE)) {
-                $newTable->removeForeignKey($foreignKey->getName());
-            }
-        }
-
-        $this->applyDiff($table, $newTable);
+        // The keys are owned by the entity mapping, so they are kept: up() may have skipped them as already there.
     }
 
     private function hasForeignKeyOn(Table $table, string $column): bool
